@@ -33,6 +33,19 @@ fn is_object(s: &str) -> bool {
     }
 }
 
+fn is_array(s: &str) -> bool {
+    // Matches: name = [value1, value2, ...]
+    let s = s.trim();
+    if let Some(idx) = s.find('=') {
+        let (left, right) = s.split_at(idx);
+        let left = left.trim();
+        let right = right[1..].trim(); // skip '='
+        !left.is_empty() && right.starts_with('[') && right.ends_with(']')
+    } else {
+        false
+    }
+}
+
 pub fn proceed(input_file: &str) {
     let content: String = std::fs::read_to_string(input_file)
         .expect("Failed to read input file");
@@ -47,11 +60,20 @@ pub fn proceed(input_file: &str) {
 
     for line in lines {
         if is_variable(line) {
-            let parts: Vec<&str> = line.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                let key = parts[0].trim().to_string();
-                let value = parts[1].trim().to_string();
-                variables.insert(key, value);
+            if is_array(line) {
+                let parts: Vec<&str> = line.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    let key = parts[0].trim().to_string();
+                    let value = parts[1].trim().to_string();
+                    variables.insert(key, value);
+                }
+            } else {
+                let parts: Vec<&str> = line.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    let key = parts[0].trim().to_string();
+                    let value = parts[1].trim().to_string();
+                    variables.insert(key, value);
+                }
             }
         } else if is_object(line) {
             let parts: Vec<&str> = line.splitn(2, "->").collect();
@@ -62,6 +84,7 @@ pub fn proceed(input_file: &str) {
             }
         } else {
             eprintln!("Invalid line format: {}", line);
+            break;
         }
     }
 
