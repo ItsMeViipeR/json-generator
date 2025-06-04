@@ -155,8 +155,12 @@ pub fn proceed(input_file: &str) {
             }
         }
 
-        let joined = inner_json_parts.join(", ");
-        let obj_json = format!("\"{}\": {{ {} }}", obj_key, joined);
+        let joined = inner_json_parts
+            .iter()
+            .map(|entry| format!("    {}", entry))
+            .collect::<Vec<_>>()
+            .join(",\n");
+        let obj_json = format!("  \"{}\": {{\n{}\n  }}", obj_key, joined);
         objects_json.insert(obj_key.clone(), obj_json);
     }
 
@@ -171,7 +175,7 @@ pub fn proceed(input_file: &str) {
     final_json.push_str("{\n");
 
     for value in objects_json.values() {
-        final_json.push_str(&format!("  {},\n", value));
+        final_json.push_str(&format!("{},\n", value));
     }
 
     if final_json.ends_with(",\n") {
