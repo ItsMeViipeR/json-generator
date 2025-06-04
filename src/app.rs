@@ -37,12 +37,14 @@ fn resolve_variable_value(
     key: &str,
     variables: &std::collections::HashMap<String, String>,
     seen: &mut std::collections::HashSet<String>,
+    used_keys: &mut std::collections::HashSet<String>,
 ) -> Option<String> {
     if seen.contains(key) {
         eprintln!("⚠️  Circular reference detected for variable '{}'", key);
         return None;
     }
     seen.insert(key.to_string());
+    used_keys.insert(key.to_string());
 
     let value = variables.get(key)?;
     // Si la valeur est un tableau JSON, on traite récursivement ses éléments
@@ -57,7 +59,7 @@ fn resolve_variable_value(
         let mut resolved_parts = vec![];
         for token in tokens {
             if variables.contains_key(token) {
-                if let Some(resolved) = resolve_variable_value(token, variables, seen) {
+                if let Some(resolved) = resolve_variable_value(token, variables, seen, used_keys) {
                     resolved_parts.push(resolved);
                 } else {
                     // boucle détectée, on garde le token brut
@@ -70,6 +72,28 @@ fn resolve_variable_value(
         }
         seen.remove(key);
         Some(format!("[{}]", resolved_parts.join(", ")))
+    } else if value.starts_with('{') && value.ends_with('}') {
+        // Objet défini dans une variable
+        let inner_keys: Vec<&str> = value
+            .trim_matches(|c| c == '{' || c == '}')
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut inner_json_parts = vec![];
+
+        for key in inner_keys.iter() {
+            if let Some(inner_val) = resolve_variable_value(key, variables, seen, used_keys) {
+                used_keys.insert(key.to_string());
+                inner_json_parts.push(format!("\"{}\": {}", key, inner_val));
+            } else {
+                eprintln!("⚠️  Variable '{}' used in '{}' is undefined or invalid", key, value);
+            }
+        }
+
+        seen.remove(key);
+        return Some(format!("{{ {} }}", inner_json_parts.join(", ")));
     } else {
         // Autres types : on retourne la valeur brute
         seen.remove(key);
@@ -126,15 +150,15 @@ pub fn proceed(input_file: &str) {
 
     // Résoudre toutes les variables récursivement
     let mut resolved_variables = std::collections::HashMap::new();
+    let mut used_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
     for key in variables.keys() {
         let mut seen = std::collections::HashSet::new();
-        if let Some(val) = resolve_variable_value(key, &variables, &mut seen) {
+        if let Some(val) = resolve_variable_value(key, &variables, &mut seen, &mut used_keys) {
             resolved_variables.insert(key.clone(), val);
         }
     }
 
     let mut objects_json: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    let mut used_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (obj_key, obj_value) in &objects {
         let inner_keys: Vec<&str> = obj_value

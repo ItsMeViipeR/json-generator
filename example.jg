@@ -1,13 +1,11 @@
-a = "abc"
-number = 3
-boolean = true
-array = [1, 2]
-object = { "key": "value" }
-test = 4 // ⚠️  Variable 'test' was defined but never used
-result -> { a, number, boolean, array, object }
-string = "abc"
-res -> { a, number } // ⚠️  Variable 'string' not defined
+username1 = "user1"
+age1 = 20
+hobbies1 = ["first", "second"]
+user1 = { username1, age1, hobbies1 }
 
-# you can also pass variables in another variables
-variableInAnother = [a, "anotherThing"]
-hello -> { variableInAnother }
+username2 = "user2"
+age2 = 21
+hobbies2 = ["first", "second"]
+user2 = { username2, age2, hobbies2 }
+
+users -> { user1, user2 }

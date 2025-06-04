@@ -1,16 +1,6 @@
 {
-  "res": {
-    "a": "abc",
-    "number": 3
-  },
-  "result": {
-    "a": "abc",
-    "number": 3,
-    "boolean": true,
-    "array": [1, 2],
-    "object": { "key": "value" }
-  },
-  "hello": {
-    "variableInAnother": ["abc", "anotherThing"]
+  "users": {
+    "user1": { "username1": "user1", "age1": 20, "hobbies1": ["first", "second"] },
+    "user2": { "username2": "user2", "age2": 21, "hobbies2": ["first", "second"] }
   }
 }
