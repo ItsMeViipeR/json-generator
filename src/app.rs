@@ -33,30 +33,47 @@ fn is_object(s: &str) -> bool {
     }
 }
 
-fn is_array(s: &str) -> bool {
-    // Matches: name = [value1, value2, ...]
-    let s = s.trim();
-    if let Some(idx) = s.find('=') {
-        let (left, right) = s.split_at(idx);
-        let left = left.trim();
-        let right = right[1..].trim(); // skip '='
-        !left.is_empty() && right.starts_with('[') && right.ends_with(']')
-    } else {
-        false
+fn resolve_variable_value(
+    key: &str,
+    variables: &std::collections::HashMap<String, String>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Option<String> {
+    if seen.contains(key) {
+        eprintln!("⚠️  Circular reference detected for variable '{}'", key);
+        return None;
     }
-}
+    seen.insert(key.to_string());
 
-fn is_json_object(s: &str) -> bool {
-    // Matches: name = { name: value, ... }
-    let s = s.trim();
+    let value = variables.get(key)?;
+    // Si la valeur est un tableau JSON, on traite récursivement ses éléments
+    if value.starts_with('[') && value.ends_with(']') {
+        let tokens: Vec<&str> = value
+            .trim_matches(|c| c == '[' || c == ']')
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
-    if let Some(idx) = s.find('=') {
-        let (left, right) = s.split_at(idx);
-        let left = left.trim();
-        let right = right[1..].trim(); // skip '='
-        !left.is_empty() && right.starts_with('{') && right.ends_with('}')
+        let mut resolved_parts = vec![];
+        for token in tokens {
+            if variables.contains_key(token) {
+                if let Some(resolved) = resolve_variable_value(token, variables, seen) {
+                    resolved_parts.push(resolved);
+                } else {
+                    // boucle détectée, on garde le token brut
+                    resolved_parts.push(token.to_string());
+                }
+            } else {
+                // littéral
+                resolved_parts.push(token.to_string());
+            }
+        }
+        seen.remove(key);
+        Some(format!("[{}]", resolved_parts.join(", ")))
     } else {
-        false
+        // Autres types : on retourne la valeur brute
+        seen.remove(key);
+        Some(value.clone())
     }
 }
 
@@ -64,39 +81,35 @@ pub fn proceed(input_file: &str) {
     let content: String = std::fs::read_to_string(input_file)
         .expect("Failed to read input file");
 
+    // Supprimer commentaires et lignes vides
     let lines: Vec<&str> = content.lines()
-        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
-        .map(|line| line.trim())
-        .collect::<Vec<&str>>();
+        .map(|line| {
+            let line = line.trim();
+            let line = if let Some(pos) = line.find('#') {
+                &line[..pos]
+            } else {
+                line
+            };
+            let line = if let Some(pos) = line.find("//") {
+                &line[..pos]
+            } else {
+                line
+            };
+            line.trim()
+        })
+        .filter(|line| !line.is_empty())
+        .collect();
 
     let mut variables: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut objects: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
     for line in lines {
         if is_variable(line) {
-            if is_array(line) {
-                let parts: Vec<&str> = line.splitn(2, '=').collect();
-                if parts.len() == 2 {
-                    let key = parts[0].trim().to_string();
-                    let value = parts[1].trim().to_string();
-                    variables.insert(key, value);
-                }
-            } else if is_json_object(line) {
-                let parts: Vec<&str> = line.splitn(2, '=').collect();
-
-                if parts.len() == 2 {
-                    let key = parts[0].trim().to_string();
-                    let value = parts[1].trim().to_string();
-
-                    variables.insert(key, value);
-                }
-            } else {
-                let parts: Vec<&str> = line.splitn(2, '=').collect();
-                if parts.len() == 2 {
-                    let key = parts[0].trim().to_string();
-                    let value = parts[1].trim().to_string();
-                    variables.insert(key, value);
-                }
+            let parts: Vec<&str> = line.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                let key = parts[0].trim().to_string();
+                let value = parts[1].trim().to_string();
+                variables.insert(key, value);
             }
         } else if is_object(line) {
             let parts: Vec<&str> = line.splitn(2, "->").collect();
@@ -111,40 +124,62 @@ pub fn proceed(input_file: &str) {
         }
     }
 
-    let mut variables_json: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-
-    // replace variables in objects by their values
-    for (key, value) in &variables {
-        let value_json = format!("\"{key}\": {value}");
-
-        variables_json.insert(key.clone(), value_json);
+    // Résoudre toutes les variables récursivement
+    let mut resolved_variables = std::collections::HashMap::new();
+    for key in variables.keys() {
+        let mut seen = std::collections::HashSet::new();
+        if let Some(val) = resolve_variable_value(key, &variables, &mut seen) {
+            resolved_variables.insert(key.clone(), val);
+        }
     }
 
     let mut objects_json: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut used_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (obj_key, obj_value) in &objects {
-        let mut replaced_value = obj_value.clone();
-        for (var_key, var_json) in &variables_json {
-            replaced_value = replaced_value.replace(var_key, var_json);
-        }
-        
-        let obj_json = format!("\"{obj_key}\": {replaced_value}");
+        let inner_keys: Vec<&str> = obj_value
+            .trim_matches(|c| c == '{' || c == '}')
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
+        let mut inner_json_parts = vec![];
+
+        for key in inner_keys {
+            if let Some(val) = resolved_variables.get(key) {
+                inner_json_parts.push(format!("\"{}\": {}", key, val));
+                used_keys.insert(key.to_string());
+            } else {
+                eprintln!("⚠️  Variable '{}' not defined", key);
+            }
+        }
+
+        let joined = inner_json_parts.join(", ");
+        let obj_json = format!("\"{}\": {{ {} }}", obj_key, joined);
         objects_json.insert(obj_key.clone(), obj_json);
+    }
+
+    // Warn about unused variables
+    for key in resolved_variables.keys() {
+        if !used_keys.contains(key) {
+            eprintln!("⚠️  Variable '{}' was defined but never used", key);
+        }
     }
 
     let mut final_json = String::new();
     final_json.push_str("{\n");
-    
-    for (_, value) in &objects_json {
+
+    for value in objects_json.values() {
         final_json.push_str(&format!("  {},\n", value));
     }
+
     if final_json.ends_with(",\n") {
-        final_json.truncate(final_json.len() - 2); // remove trailing comma
+        final_json.truncate(final_json.len() - 2);
     }
+
     final_json.push_str("\n}");
 
-    // write the final JSON to a file
     let output_file = input_file.replace(".jg", ".json");
     std::fs::write(&output_file, final_json)
         .expect("Failed to write output file");

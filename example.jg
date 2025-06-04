@@ -1,6 +1,13 @@
-string = "abc"
+a = "abc"
 number = 3
 boolean = true
 array = [1, 2]
 object = { "key": "value" }
-result -> { string, number, boolean, array, object }
+test = 4 // ⚠️  Variable 'test' was defined but never used
+result -> { a, number, boolean, array, object }
+string = "abc"
+res -> { a, number } // ⚠️  Variable 'string' not defined
+
+# you can also pass variables in another variables
+variableInAnother = [a, "anotherThing"]
+hello -> { variableInAnother }
