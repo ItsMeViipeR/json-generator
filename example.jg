@@ -1,4 +1,6 @@
-a = "abc"
-b = 3
-c = ["ici", "là"]
-d -> { a, b, c }
+string = "abc"
+number = 3
+boolean = true
+array = [1, 2]
+object = { "key": "value" }
+result -> { string, number, boolean, array, object }

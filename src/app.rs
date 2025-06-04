@@ -46,6 +46,20 @@ fn is_array(s: &str) -> bool {
     }
 }
 
+fn is_json_object(s: &str) -> bool {
+    // Matches: name = { name: value, ... }
+    let s = s.trim();
+
+    if let Some(idx) = s.find('=') {
+        let (left, right) = s.split_at(idx);
+        let left = left.trim();
+        let right = right[1..].trim(); // skip '='
+        !left.is_empty() && right.starts_with('{') && right.ends_with('}')
+    } else {
+        false
+    }
+}
+
 pub fn proceed(input_file: &str) {
     let content: String = std::fs::read_to_string(input_file)
         .expect("Failed to read input file");
@@ -65,6 +79,15 @@ pub fn proceed(input_file: &str) {
                 if parts.len() == 2 {
                     let key = parts[0].trim().to_string();
                     let value = parts[1].trim().to_string();
+                    variables.insert(key, value);
+                }
+            } else if is_json_object(line) {
+                let parts: Vec<&str> = line.splitn(2, '=').collect();
+
+                if parts.len() == 2 {
+                    let key = parts[0].trim().to_string();
+                    let value = parts[1].trim().to_string();
+
                     variables.insert(key, value);
                 }
             } else {
@@ -120,11 +143,10 @@ pub fn proceed(input_file: &str) {
         final_json.truncate(final_json.len() - 2); // remove trailing comma
     }
     final_json.push_str("\n}");
-    println!("{}", final_json);
 
     // write the final JSON to a file
     let output_file = input_file.replace(".jg", ".json");
     std::fs::write(&output_file, final_json)
         .expect("Failed to write output file");
-    println!("Output written to: {}", output_file);
+    println!("Output written to: {output_file}");
 }
